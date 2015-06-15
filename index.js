@@ -19,28 +19,36 @@ module.exports = function ratelimit (opts) {
   var getId = opts.id || function () { return this.ip }
   var limiter = new Limiter(options)
   ratelimitT.limiter = limiter
+  ratelimitT.limit = limit
   return ratelimitT
 
   function ratelimitT (next) {
     var id = getId.call(this)
     if (id === false) return next()
+    limit(id).call(this, next)
+  }
 
-    var ctx = this
-    limiter.get(id)(function (err, limit) {
-      if (err) throw err
-      var remaining = limit.remaining > 0 ? limit.remaining - 1 : 0
+  function limit (id, max, duration) {
+    return function (callback) {
+      var ctx = this
+      limiter.get(id, max, duration)(function (err, res) {
+        if (err) throw err
+        var remaining = res.remaining > 0 ? res.remaining - 1 : 0
 
-      // header fields
-      ctx.set('X-RateLimit-Limit', limit.total)
-      ctx.set('X-RateLimit-Remaining', remaining)
-      ctx.set('X-RateLimit-Reset', limit.reset)
+        // header fields
+        ctx.set('X-RateLimit-Limit', res.total)
+        ctx.set('X-RateLimit-Remaining', remaining)
+        ctx.set('X-RateLimit-Reset', res.reset)
 
-      debug('remaining %s/%s %s', id, remaining, limit.total)
-      if (limit.remaining) return
+        debug('remaining %s/%s %s', id, remaining, res.total)
+        if (res.remaining) return
 
-      var after = Math.floor((limit.reset - Date.now()) / 1000)
-      ctx.set('Retry-After', after)
-      ctx.throw(429, 'Rate limit exceeded, retry in ' + after + ' seconds.')
-    })(next)
+        var after = Math.floor((res.reset - Date.now()) / 1000)
+        ctx.set('Retry-After', after)
+        ctx.status = 429
+        ctx.body = 'Rate limit exceeded, retry in ' + after + ' seconds.'
+        ctx.end()
+      })(callback)
+    }
   }
 }
