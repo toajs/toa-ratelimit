@@ -7,17 +7,16 @@ var Limiter = require('thunk-ratelimiter')
 var debug = require('debug')('ratelimit')
 
 module.exports = function ratelimit (opts) {
-
   var options = {
     duration: opts.duration,
     prefix: opts.prefix,
-    max: opts.max,
-    db: opts.db
+    max: opts.max
   }
 
   if (opts.id && typeof opts.id !== 'function') throw new Error('id must be function')
   var getId = opts.id || function () { return this.ip }
   var limiter = new Limiter(options)
+  limiter.connect(opts.db)
   ratelimitT.limiter = limiter
   ratelimitT.limit = limit
   return ratelimitT
