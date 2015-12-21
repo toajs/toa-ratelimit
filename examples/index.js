@@ -4,18 +4,23 @@
 // **License:** MIT
 
 var toa = require('toa')
-var redis = require('thunk-redis')
 var ratelimit = require('..')
 
 var app = toa(function () {
-  this.body = 'Hi'
+  this.body = this.res._headers
 })
 
 app.use(ratelimit({
-  db: redis.createClient(),
-  max: 10,
-  duration: 10 * 60 * 1000,
-  id: function () { return '1111111111' }
+  redis: 6379,
+  duration: 10000,
+  getId: function () { return this.ip },
+  policy: {
+    'GET': [3, 5000],
+    'GET /test': [3, 5000, 3, 10000],
+    '/test': 5
+  }
 }))
 
-app.listen(3000)
+app.listen(3000, function () {
+  console.log('listening on port 3000')
+})

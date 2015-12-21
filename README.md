@@ -1,6 +1,6 @@
 toa-ratelimit
 ==========
-Rate limiter module for toa.
+Smart rate limiter module for toa.
 
 [![NPM version][npm-image]][npm-url]
 [![Build Status][travis-image]][travis-url]
@@ -18,28 +18,27 @@ npm install toa-ratelimit
 ## Example
 
 ```js
-var ratelimit = require('toa-ratelimit')
-var redis = require('thunk-redis')
 var toa = require('toa')
-
+var ratelimit = require('toa-ratelimit')
 
 var app = toa(function () {
-  this.body = 'Stuff!'
+  this.body = this.res._headers
 })
 
-// apply rate limit
-
 app.use(ratelimit({
-  db: redis.createClient(),
-  duration: 60000,
-  max: 100,
-  id: function () {
-    return this.ip
+  redis: 6379,
+  duration: 10000,
+  getId: function () { return this.ip },
+  policy: {
+    'GET': [3, 5000],
+    'GET /test': [3, 5000, 3, 10000],
+    '/test': 5
   }
-}));
+}))
 
-app.listen(3000);
-console.log('listening on port 3000');
+app.listen(3000, function () {
+  console.log('listening on port 3000')
+})
 ```
 
 ## API
@@ -47,87 +46,57 @@ console.log('listening on port 3000');
 ```js
 var ratelimit = require('toa-ratelimit')
 ```
-
-### ratelimit(options)
-
-```js
-var ratelimitT = ratelimit(options)
-```
-
 `ratelimitT` is a thunk function. It can be used as middleware or module.
-
-- `options.db`: *Required*, {Object}, redis connection instance
-- `options.max`: *Optional*, {Number}, max requests within `duration`, default to `2500`
-- `options.duration`: *Optional*, {Number}, of limit in milliseconds, default to `3600000`
-- `options.id`: *Optional*, {Function}, generate a identifier to compare requests, `this` of the function is toa `context`, default to `function () { return this.ip }`
-- `options.prefix`: *Optional*, Type: `String`, redis key namespace, default to `LIMIT`.
-
-**Use as a middleware:**
-```js
-var ratelimitT = ratelimit({
-  db: redis.createClient(),
-  id: function () { return this.user._id }
-})
-
-app.use(ratelimitT)
-```
 
 **Use as a module:**
 ```js
 var ratelimitT = ratelimit({
-  db: redis.createClient(),
-  id: function () { return this.user._id }
+  redis: 6379,
+  duration: 10000,
+  getId: function () { return this.ip },
+  policy: {
+    'GET': [3, 5000],
+    'POST': [3, 5000, 3, 10000]
+  }
 })
 
 var app = toa(function *() {
   // ...
-  // Used ratelimit only for `POST` request:
-
-  if (this.method === 'POST') yield ratelimitT
+  // Used ratelimit only for `/api/test`:
+  if (this.path === '/api/test') yield ratelimitT
 })
 ```
 
-#### ratelimitT.limit(id[, max, duration])
+- `options.prefix`: *Optional*, Type: `String`, redis key namespace, default to `LIMIT`.
+- `options.redis`: *Optional*, {Mix}, thunk-redis instance or [thunk-redis options](https://github.com/thunks/thunk-redis#api-more)
+- `options.duration`: *Optional*, {Number}, of limit in milliseconds, default to `3600000`
+- `options.getId`: *Required*, {Function}, generate a identifier for requests
+- `options.policy`: *Required*, {Object}, limit policy
 
-return a thunk function.
+    **policy key:**
+    It support 3 types: `METHOD /path`, `/path` and `METHOD`. Limiter will try match `METHOD /path` first, then `/path`, then `METHOD`. It means that `METHOD /path` has highest priority, then fallback to `/path` and `METHOD`.
 
-- `id`: *Required*, {String}, the identifier to limit against (typically a user id)
-- `max`: *Optional*, {Number}, max requests within `duration`, default to `options.max`
-- `duration`: *Optional*, {Number}, of limit in milliseconds, default to `options.duration`
+    **policy value:**
+    If value is a member, it means max count with `options.duration`. If value is array, it should be a pair of `max` and `duration`, support one more pairs.
 
-```js
-var ratelimitT = ratelimit({
-  db: redis.createClient(),
-  max: 100,
-  duration: 30 * 60 * 1000,
-  id: function () {
-    return this.user._id
-  }
-})
+    The first pair is default limit policy. If someone touch the maximum of default limit,
+    then the next policy will be apply, and so on. So next policy should be stricter than previous one.
 
-var app = toa(function *() {
+    If someone touch the maximum of limit and request again after double current `duration` time, it will rollback to default policy.
 
-  // Used ratelimit only for `POST` and `PUT` request:
-  if (/POST|PUT/.test(this.method)) {
-    switch (this.user.role) {
-      case 2: // owner, 1000 ops
-        yield ratelimitT.limit(this.user._id, 1000)
-        break
-      case 1: // admin, 500 ops
-        yield ratelimitT.limit(this.user._id, 500)
-        break
-      default: // member, 100 ops
-        yield ratelimitT
+    **example policy:**
+    ```js
+    options.policy = {
+      'HEAD': 100,
+      'GET': [60, 60000, 30, 60000, 30, 120000],
+      'PUT': [40, 60000, 20, 60000, 10, 120000],
+      'POST': [40, 60000, 10, 60000],
+      'DELETE': [40, 60000, 10, 60000],
+      'POST /api/organizations': [10, 60000, 2, 60000],
+      'POST /api/projects': [20, 60000, 5, 60000],
+      '/api/auth': [10, 60000, 5, 120000],
     }
-  }
-
-  // do others
-})
-```
-
-#### ratelimitT.limiter
-
-The instance of `thunk-ratelimiter`.
+    ```
 
 ## Responses
 
@@ -137,15 +106,13 @@ Example 200 with header fields:
 HTTP/1.1 200 OK
 
 Connection:keep-alive
-Content-Length:2
-Content-Type:text/plain; charset=utf-8
-Date:Mon, 15 Jun 2015 16:23:29 GMT
+Content-Length:111
+Content-Type:application/json; charset=utf-8
+Date:Thu, 10 Dec 2015 13:21:55 GMT
 X-Powered-By:Toa
-X-RateLimit-Limit:10
-X-RateLimit-Remaining:9
-X-RateLimit-Reset:1434386009498
-
-Hi
+X-RateLimit-Limit:3
+X-RateLimit-Remaining:2
+X-RateLimit-Reset:1449753721
 ```
 
 Example 429 with header fields:
@@ -154,23 +121,15 @@ Example 429 with header fields:
 HTTP/1.1 429 Too Many Requests
 
 Connection:keep-alive
-Content-Length:42
-Content-Type:text/plain; charset=utf-8
-Date:Mon, 15 Jun 2015 16:24:10 GMT
-Retry-After:558
+Content-Length:39
+Content-Type:text/html; charset=utf-8
+Date:Thu, 10 Dec 2015 13:22:36 GMT
+Retry-After:3
 X-Powered-By:Toa
-X-RateLimit-Limit:10
-X-RateLimit-Remaining:0
-X-RateLimit-Reset:1434386009498
-
-Rate limit exceeded, retry in 558 seconds.
+X-RateLimit-Limit:3
+X-RateLimit-Remaining:-1
+X-RateLimit-Reset:1449753759
 ```
-
-
-## Who's using
-
-### [Teambition](https://www.teambition.com/)
-1. Teambition community https://bbs.teambition.com/
 
 [npm-url]: https://npmjs.org/package/toa-ratelimit
 [npm-image]: http://img.shields.io/npm/v/toa-ratelimit.svg

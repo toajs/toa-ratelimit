@@ -1,10 +1,10 @@
 {
   "name": "toa-ratelimit",
-  "description": "Rate limiter module for toa.",
+  "description": "Smart rate limiter module for toa.",
   "authors": [
     "Yan Qing <admin@zensh.com>"
   ],
-  "version": "1.2.0",
+  "version": "2.0.0",
   "main": "index.js",
   "license": "MIT",
   "repository": {
@@ -23,17 +23,16 @@
     "redis"
   ],
   "dependencies": {
-    "debug": "^2.2.0",
-    "thunk-ratelimiter": "^2.0.1"
+    "thunk-ratelimiter": "^2.0.2"
   },
   "devDependencies": {
     "mocha": "^2.3.4",
     "standard": "^5.4.1",
     "supertest": "^1.1.0",
     "thunk-mocha": "^1.0.1",
-    "thunk-redis": "^1.2.4",
-    "thunks": "^4.1.0",
-    "toa": "^1.2.0"
+    "thunk-redis": "^1.3.0",
+    "thunks": "^4.1.1",
+    "toa": "^1.2.1"
   },
   "scripts": {
     "test": "standard && mocha -t 10000 -r thunk-mocha test/index.js"
