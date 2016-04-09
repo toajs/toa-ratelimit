@@ -4,6 +4,7 @@ Smart rate limiter module for toa.
 
 [![NPM version][npm-image]][npm-url]
 [![Build Status][travis-image]][travis-url]
+[![Downloads][downloads-image]][downloads-url]
 
 ## Requirements
 
@@ -46,11 +47,11 @@ app.listen(3000, function () {
 ```js
 var ratelimit = require('toa-ratelimit')
 ```
-`ratelimitT` is a thunk function. It can be used as middleware or module.
+`limiter` is a thunk function. It can be used as middleware or module.
 
 **Use as a module:**
 ```js
-var ratelimitT = ratelimit({
+var limiter = ratelimit({
   redis: 6379,
   duration: 10000,
   getId: function () { return this.ip },
@@ -63,7 +64,7 @@ var ratelimitT = ratelimit({
 var app = toa(function *() {
   // ...
   // Used ratelimit only for `/api/test`:
-  if (this.path === '/api/test') yield ratelimitT
+  if (this.path === '/api/test') yield limiter
 })
 ```
 
@@ -97,6 +98,16 @@ var app = toa(function *() {
       '/api/auth': [10, 60000, 5, 120000],
     }
     ```
+
+### limiter.remove(context)
+
+Remove `context`'s rate limit data. Return thunk function.
+
+```js
+limiter.remove(this)(function (err, res) {
+  console.log(err, res) // null, 1
+})
+```
 
 ## Responses
 
@@ -136,3 +147,6 @@ X-RateLimit-Reset:1449753759
 
 [travis-url]: https://travis-ci.org/toajs/toa-ratelimit
 [travis-image]: http://img.shields.io/travis/toajs/toa-ratelimit.svg
+
+[downloads-url]: https://npmjs.org/package/toa-ratelimit
+[downloads-image]: http://img.shields.io/npm/dm/toa-ratelimit.svg?style=flat-square

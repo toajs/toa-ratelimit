@@ -26,30 +26,20 @@ module.exports = function ratelimit (opts) {
   })
 
   limiter.connect.apply(limiter, redis)
-  ratelimitT.limiter = limiter
-  return ratelimitT
 
-  function ratelimitT (next) {
+  limit.remove = function (ctx) {
+    return ctx.thunk(function (done) {
+      var args = getArgs(ctx)
+      if (!args) return done()
+      limiter.remove(args[0])(done)
+    })
+  }
+  return limit
+
+  function limit (next) {
     var ctx = this
-    var id = getId.call(this)
-    if (!id) return next()
-
-    var method = this.method
-    var pathname = this.path
-    var limitKey = method + ' ' + pathname
-    if (!policy[limitKey]) {
-      limitKey = pathname
-      if (!policy[limitKey]) {
-        limitKey = method
-        if (!policy[limitKey]) return next()
-      }
-    }
-
-    var args = policy[limitKey]
-    if (Array.isArray(args)) args = args.slice()
-    else args = [args]
-    args.unshift(id + limitKey)
-
+    var args = getArgs(this)
+    if (!args) return next()
     limiter.get(args)(function (err, res) {
       if (err) throw err
       // header fields
@@ -64,5 +54,27 @@ module.exports = function ratelimit (opts) {
       ctx.body = 'Rate limit exceeded, retry in ' + after + ' seconds.'
       ctx.end()
     })(next)
+  }
+
+  function getArgs (ctx) {
+    var id = getId.call(ctx)
+    if (!id) return null
+
+    var method = ctx.method
+    var pathname = ctx.path
+    var limitKey = method + ' ' + pathname
+    if (!policy[limitKey]) {
+      limitKey = pathname
+      if (!policy[limitKey]) {
+        limitKey = method
+        if (!policy[limitKey]) return null
+      }
+    }
+
+    var args = policy[limitKey]
+    if (Array.isArray(args)) args = args.slice()
+    else args = [args]
+    args.unshift(id + limitKey)
+    return args
   }
 }
