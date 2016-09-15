@@ -43,13 +43,13 @@ module.exports = function ratelimit (opts) {
     limiter.get(args)(function (err, res) {
       if (err) throw err
       // header fields
-      ctx.set('X-RateLimit-Limit', res.total)
-      ctx.set('X-RateLimit-Remaining', res.remaining - 1)
-      ctx.set('X-RateLimit-Reset', Math.ceil(res.reset / 1000))
+      ctx.set('x-ratelimit-limit', res.total)
+      ctx.set('x-ratelimit-remaining', res.remaining - 1)
+      ctx.set('x-ratelimit-reset', Math.ceil(res.reset / 1000))
       if (res.remaining) return
 
       var after = Math.ceil((res.reset - Date.now()) / 1000)
-      ctx.set('Retry-After', after)
+      ctx.set('retry-after', after)
       ctx.status = 429
       ctx.body = 'Rate limit exceeded, retry in ' + after + ' seconds.'
       ctx.end()
