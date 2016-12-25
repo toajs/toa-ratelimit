@@ -3,51 +3,32 @@
 //
 // **License:** MIT
 
-var toa = require('toa')
-var tman = require('tman')
-var assert = require('assert')
-var thunk = require('thunks')()
-var request = require('supertest')
-var redis = require('thunk-redis')
-var ratelimit = require('..')
+const Toa = require('toa')
+const tman = require('tman')
+const assert = require('assert')
+const thunk = require('thunks')()
+const request = require('supertest')
+const redis = require('thunk-redis')
+const ratelimit = require('..')
 
-var redisClient = redis.createClient()
+const redisClient = redis.createClient()
 
 tman.suite('toa-ratelimit', function () {
   this.timeout(10000)
 
-  tman.beforeEach(function (done) {
-    redisClient.keys('*LIMIT:*')(function (err, keys) {
-      if (err) throw err
-      return thunk.all(keys.map(function (key) {
-        return redisClient.del(key)
-      }))
-    })(done)
+  tman.beforeEach(function * () {
+    let keys = yield redisClient.keys('*LIMIT:*')
+    if (keys.length) yield redisClient.del(keys)
   })
 
   tman.it('should throw error with wrong options', function () {
-    assert.throws(function () {
-      ratelimit({})
-    })
-
-    assert.throws(function () {
-      ratelimit({
-        getId: 'test'
-      })
-    })
-
-    assert.throws(function () {
-      ratelimit({
-        getId: function (req) {},
-        policy: []
-      })
-    })
+    assert.throws(() => ratelimit({}))
+    assert.throws(() => ratelimit({getId: 'test'}))
+    assert.throws(() => ratelimit({getId: function (req) {}, policy: []}))
   })
 
   tman.it('should work without redis options', function () {
-    var app = toa(function () {
-      this.body = 'Hello'
-    })
+    let app = new Toa()
 
     app.use(ratelimit({
       duration: 500,
@@ -58,9 +39,12 @@ tman.suite('toa-ratelimit', function () {
         return this.ip
       }
     }))
+    app.use(function () {
+      this.body = 'Hello'
+    })
 
-    var now = Date.now() / 1000
-    var after = (Date.now() + 500) / 1000
+    let now = Date.now() / 1000
+    let after = (Date.now() + 500) / 1000
     return request(app.listen())
       .get('/')
       .expect(200)
@@ -73,10 +57,8 @@ tman.suite('toa-ratelimit', function () {
       })
   })
 
-  tman.it('should work with simple options', function () {
-    var app = toa(function () {
-      this.body = 'Hello'
-    })
+  tman.it('should work with simple options', function * () {
+    let app = new Toa()
 
     app.use(ratelimit({
       redis: redisClient,
@@ -87,12 +69,15 @@ tman.suite('toa-ratelimit', function () {
         'GET': [3, 1000]
       }
     }))
+    app.use(function () {
+      this.body = 'Hello'
+    })
 
-    var now = Date.now() / 1000
-    var after = (Date.now() + 1000) / 1000
-    var server = app.listen()
+    let now = Date.now() / 1000
+    let after = (Date.now() + 1000) / 1000
+    let server = app.listen()
 
-    return thunk.all([
+    yield [
       request(server)
         .get('/')
         .expect(200)
@@ -131,13 +116,11 @@ tman.suite('toa-ratelimit', function () {
           assert.strictEqual(res.headers['x-ratelimit-limit'], '3')
           assert.strictEqual(res.headers['x-ratelimit-remaining'], '-1')
         })
-    ])
+    ]
   })
 
-  tman.it('should work with vary policy', function () {
-    var app = toa(function () {
-      this.body = 'Hello'
-    })
+  tman.it('should work with vary policy', function * () {
+    let app = new Toa()
     app.use(ratelimit({
       duration: 1000,
       redis: redisClient,
@@ -150,10 +133,13 @@ tman.suite('toa-ratelimit', function () {
         '/path2': 3
       }
     }))
+    app.use(function () {
+      this.body = 'Hello'
+    })
 
-    var server = app.listen()
+    let server = app.listen()
 
-    return thunk.all([
+    yield [
       request(server)
         .get('/')
         .expect(200)
@@ -183,13 +169,11 @@ tman.suite('toa-ratelimit', function () {
           assert.strictEqual(res.text, 'Hello')
           assert.strictEqual(res.headers['x-ratelimit-limit'], undefined)
         })
-    ])
+    ]
   })
 
-  tman.it('should work with multiple policy', function () {
-    var app = toa(function () {
-      this.body = 'Hello'
-    })
+  tman.it('should work with multiple policy', function * () {
+    let app = new Toa()
     app.use(ratelimit({
       redis: redisClient,
       getId: function () {
@@ -199,10 +183,13 @@ tman.suite('toa-ratelimit', function () {
         'GET': [3, 500, 2, 1000, 1, 1000]
       }
     }))
+    app.use(function () {
+      this.body = 'Hello'
+    })
 
-    var server = app.listen()
+    let server = app.listen()
     // policy [3, 500]
-    return thunk.all([
+    yield [
       request(server)
         .get('/')
         .expect(200)
@@ -232,69 +219,65 @@ tman.suite('toa-ratelimit', function () {
           assert.strictEqual(res.headers['x-ratelimit-remaining'], '-1')
         }),
       thunk.delay(600)
-    ])(function () {
-      // policy [2, 1000]
-      return thunk.all([
-        request(server)
-          .get('/')
-          .expect(200)
-          .expect(function (res) {
-            assert.strictEqual(res.headers['x-ratelimit-limit'], '2')
-            assert.strictEqual(res.headers['x-ratelimit-remaining'], '1')
-          }),
-        request(server)
-          .get('/')
-          .expect(200)
-          .expect(function (res) {
-            assert.strictEqual(res.headers['x-ratelimit-limit'], '2')
-            assert.strictEqual(res.headers['x-ratelimit-remaining'], '0')
-          }),
-        request(server)
-          .get('/path2')
-          .expect(429)
-          .expect(function (res) {
-            assert.strictEqual(res.headers['x-ratelimit-limit'], '2')
-            assert.strictEqual(res.headers['x-ratelimit-remaining'], '-1')
-          }),
-        thunk.delay(1100)
-      ])
-    })(function () {
-      // policy [1, 1000]
-      return thunk.all([
-        request(server)
-          .get('/')
-          .expect(200)
-          .expect(function (res) {
-            assert.strictEqual(res.headers['x-ratelimit-limit'], '1')
-            assert.strictEqual(res.headers['x-ratelimit-remaining'], '0')
-          }),
-        request(server)
-          .get('/')
-          .expect(429)
-          .expect(function (res) {
-            assert.strictEqual(res.headers['x-ratelimit-limit'], '1')
-            assert.strictEqual(res.headers['x-ratelimit-remaining'], '-1')
-          }),
-        // this delay exceed policy duration(1000 * 2), will restore to default policy
-        thunk.delay(2100)
-      ])
-    })(function () {
-      // return to default policy [3, 500]
-      return request(server)
+    ]
+
+    // policy [2, 1000]
+    yield [
+      request(server)
         .get('/')
         .expect(200)
         .expect(function (res) {
-          assert.strictEqual(res.headers['x-ratelimit-limit'], '3')
-        })
-    })
+          assert.strictEqual(res.headers['x-ratelimit-limit'], '2')
+          assert.strictEqual(res.headers['x-ratelimit-remaining'], '1')
+        }),
+      request(server)
+        .get('/')
+        .expect(200)
+        .expect(function (res) {
+          assert.strictEqual(res.headers['x-ratelimit-limit'], '2')
+          assert.strictEqual(res.headers['x-ratelimit-remaining'], '0')
+        }),
+      request(server)
+        .get('/path2')
+        .expect(429)
+        .expect(function (res) {
+          assert.strictEqual(res.headers['x-ratelimit-limit'], '2')
+          assert.strictEqual(res.headers['x-ratelimit-remaining'], '-1')
+        }),
+      thunk.delay(1100)
+    ]
+
+    // policy [1, 1000]
+    yield [
+      request(server)
+        .get('/')
+        .expect(200)
+        .expect(function (res) {
+          assert.strictEqual(res.headers['x-ratelimit-limit'], '1')
+          assert.strictEqual(res.headers['x-ratelimit-remaining'], '0')
+        }),
+      request(server)
+        .get('/')
+        .expect(429)
+        .expect(function (res) {
+          assert.strictEqual(res.headers['x-ratelimit-limit'], '1')
+          assert.strictEqual(res.headers['x-ratelimit-remaining'], '-1')
+        }),
+      // this delay exceed policy duration(1000 * 2), will restore to default policy
+      thunk.delay(2100)
+    ]
+    // return to default policy [3, 500]
+    yield request(server)
+      .get('/')
+      .expect(200)
+      .expect(function (res) {
+        assert.strictEqual(res.headers['x-ratelimit-limit'], '3')
+      })
   })
 
-  tman.it('should remove rate limit data', function () {
-    var app = toa(function () {
-      this.body = 'Hello'
-    })
-
-    var limiter = ratelimit({
+  tman.it('should remove rate limit data', function * () {
+    let app = new Toa()
+    let limiter = ratelimit({
       redis: redisClient,
       getId: function () {
         return this.ip
@@ -304,37 +287,37 @@ tman.suite('toa-ratelimit', function () {
       }
     })
     app.use(limiter)
-    app.use(function (next) {
-      limiter.remove(this)(function (err, res) {
-        assert.strictEqual(err, null)
-        assert.strictEqual(res, 1)
-      })(next)
+    app.use(function * () {
+      assert.strictEqual(yield limiter.remove(this), 1)
+    })
+    app.use(function () {
+      this.body = 'Hello'
     })
 
-    var server = app.listen()
-    return thunk.seq([
-      request(server)
-        .get('/')
-        .expect(200)
-        .expect(function (res) {
-          assert.strictEqual(res.text, 'Hello')
-          assert.strictEqual(res.headers['x-ratelimit-limit'], '1')
-          assert.strictEqual(res.headers['x-ratelimit-remaining'], '0')
-        }),
-      request(server)
-        .get('/')
-        .expect(200)
-        .expect(function (res) {
-          assert.strictEqual(res.headers['x-ratelimit-limit'], '1')
-          assert.strictEqual(res.headers['x-ratelimit-remaining'], '0')
-        }),
-      request(server)
-        .get('/')
-        .expect(200)
-        .expect(function (res) {
-          assert.strictEqual(res.headers['x-ratelimit-limit'], '1')
-          assert.strictEqual(res.headers['x-ratelimit-remaining'], '0')
-        })
-    ])
+    let server = app.listen()
+    yield request(server)
+      .get('/')
+      .expect(200)
+      .expect(function (res) {
+        assert.strictEqual(res.text, 'Hello')
+        assert.strictEqual(res.headers['x-ratelimit-limit'], '1')
+        assert.strictEqual(res.headers['x-ratelimit-remaining'], '0')
+      })
+
+    yield request(server)
+      .get('/')
+      .expect(200)
+      .expect(function (res) {
+        assert.strictEqual(res.headers['x-ratelimit-limit'], '1')
+        assert.strictEqual(res.headers['x-ratelimit-remaining'], '0')
+      })
+
+    yield request(server)
+      .get('/')
+      .expect(200)
+      .expect(function (res) {
+        assert.strictEqual(res.headers['x-ratelimit-limit'], '1')
+        assert.strictEqual(res.headers['x-ratelimit-remaining'], '0')
+      })
   })
 })

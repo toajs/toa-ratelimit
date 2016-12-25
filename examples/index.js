@@ -3,13 +3,10 @@
 //
 // **License:** MIT
 
-var toa = require('toa')
-var ratelimit = require('..')
+const Toa = require('toa')
+const ratelimit = require('..')
 
-var app = toa(function () {
-  this.body = this.res._headers
-})
-
+const app = new Toa()
 app.use(ratelimit({
   redis: 6379,
   duration: 10000,
@@ -20,7 +17,8 @@ app.use(ratelimit({
     '/test': 5
   }
 }))
-
-app.listen(3000, function () {
-  console.log('listening on port 3000')
+app.use(function () {
+  this.body = this.res._headers
 })
+
+app.listen(3000, () => console.log('listening on port 3000'))

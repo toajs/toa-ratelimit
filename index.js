@@ -3,66 +3,65 @@
 //
 // **License:** MIT
 
-var Limiter = require('thunk-ratelimiter')
+const Limiter = require('thunk-ratelimiter')
 
 module.exports = function ratelimit (opts) {
   if (!opts || typeof opts.getId !== 'function') throw new Error('getId function required')
   if (!opts.policy || opts.policy.constructor !== Object) throw new Error('policy required')
 
-  var getId = opts.getId
+  const getId = opts.getId
 
-  var redis = opts.redis
+  let redis = opts.redis
   if (!redis) redis = []
   else if (!Array.isArray(redis)) redis = [redis]
 
-  var policy = Object.create(null)
-  Object.keys(opts.policy).map(function (key) {
+  const policy = Object.create(null)
+  for (let key of Object.keys(opts.policy)) {
     policy[key] = opts.policy[key]
-  })
+  }
 
-  var limiter = new Limiter({
+  const limiter = new Limiter({
     prefix: opts.prefix,
     duration: opts.duration
   })
 
   limiter.connect.apply(limiter, redis)
 
-  limit.remove = function (ctx) {
-    return ctx.thunk(function (done) {
-      var args = getArgs(ctx)
-      if (!args) return done()
-      limiter.remove(args[0])(done)
-    })
-  }
-  return limit
-
   function limit (next) {
-    var ctx = this
-    var args = getArgs(this)
+    let args = getArgs(this)
     if (!args) return next()
-    limiter.get(args)(function (err, res) {
+    let ctx = this
+    limiter.get(args)((err, res) => {
       if (err) throw err
       // header fields
       ctx.set('x-ratelimit-limit', res.total)
-      ctx.set('x-ratelimit-remaining', res.remaining - 1)
+      ctx.set('x-ratelimit-remaining', res.remaining)
       ctx.set('x-ratelimit-reset', Math.ceil(res.reset / 1000))
-      if (res.remaining) return
+      if (res.remaining >= 0) return
 
-      var after = Math.ceil((res.reset - Date.now()) / 1000)
-      ctx.set('retry-after', after)
+      let after = Math.ceil((res.reset - Date.now()) / 1000)
       ctx.status = 429
-      ctx.body = 'Rate limit exceeded, retry in ' + after + ' seconds.'
+      ctx.set('retry-after', after)
+      ctx.body = `Rate limit exceeded, retry in ${after} seconds.`
       ctx.end()
     })(next)
   }
 
+  limit.remove = function (ctx) {
+    return (done) => {
+      let args = getArgs(ctx)
+      if (!args) return done()
+      limiter.remove(args[0])(done)
+    }
+  }
+
   function getArgs (ctx) {
-    var id = getId.call(ctx)
+    let id = getId.call(ctx)
     if (!id) return null
 
-    var method = ctx.method
-    var pathname = ctx.path
-    var limitKey = method + ' ' + pathname
+    let method = ctx.method
+    let pathname = ctx.path
+    let limitKey = method + ' ' + pathname
     if (!policy[limitKey]) {
       limitKey = pathname
       if (!policy[limitKey]) {
@@ -71,10 +70,12 @@ module.exports = function ratelimit (opts) {
       }
     }
 
-    var args = policy[limitKey]
+    let args = policy[limitKey]
     if (Array.isArray(args)) args = args.slice()
     else args = [args]
     args.unshift(id + limitKey)
     return args
   }
+
+  return limit
 }

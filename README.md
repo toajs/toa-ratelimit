@@ -19,13 +19,10 @@ npm install toa-ratelimit
 ## Example
 
 ```js
-var toa = require('toa')
-var ratelimit = require('toa-ratelimit')
+const Toa = require('toa')
+const ratelimit = require('toa-ratelimit')
 
-var app = toa(function () {
-  this.body = this.res._headers
-})
-
+const app = new Toa()
 app.use(ratelimit({
   redis: 6379,
   duration: 10000,
@@ -36,22 +33,23 @@ app.use(ratelimit({
     '/test': 5
   }
 }))
-
-app.listen(3000, function () {
-  console.log('listening on port 3000')
+app.use(function () {
+  this.body = this.res._headers
 })
+
+app.listen(3000, () => console.log('listening on port 3000'))
 ```
 
 ## API
 
 ```js
-var ratelimit = require('toa-ratelimit')
+const ratelimit = require('toa-ratelimit')
 ```
 `limiter` is a thunk function. It can be used as middleware or module.
 
 **Use as a module:**
 ```js
-var limiter = ratelimit({
+const limiter = ratelimit({
   redis: 6379,
   duration: 10000,
   getId: function () { return this.ip },
@@ -61,7 +59,8 @@ var limiter = ratelimit({
   }
 })
 
-var app = toa(function *() {
+const app = new Toa()
+app.use(function * () {
   // ...
   // Used ratelimit only for `/api/test`:
   if (this.path === '/api/test') yield limiter
@@ -104,7 +103,7 @@ var app = toa(function *() {
 Remove `context`'s rate limit data. Return thunk function.
 
 ```js
-limiter.remove(this)(function (err, res) {
+yield limiter.remove(this)(function (err, res) {
   console.log(err, res) // null, 1
 })
 ```
