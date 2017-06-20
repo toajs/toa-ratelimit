@@ -1,5 +1,5 @@
-toa-ratelimit
-==========
+# toa-ratelimit
+
 Smart rate limiter module for toa.
 
 [![NPM version][npm-image]][npm-url]
@@ -12,7 +12,7 @@ Smart rate limiter module for toa.
 
 ## Installation
 
-```
+```sh
 npm install toa-ratelimit
 ```
 
@@ -45,9 +45,11 @@ app.listen(3000, () => console.log('listening on port 3000'))
 ```js
 const ratelimit = require('toa-ratelimit')
 ```
+
 `limiter` is a thunk function. It can be used as middleware or module.
 
 **Use as a module:**
+
 ```js
 const limiter = ratelimit({
   redis: 6379,
@@ -112,7 +114,7 @@ yield limiter.remove(this)(function (err, res) {
 
 Example 200 with header fields:
 
-```
+```text
 HTTP/1.1 200 OK
 
 Connection:keep-alive
@@ -127,7 +129,7 @@ X-RateLimit-Reset:1449753721
 
 Example 429 with header fields:
 
-```
+```text
 HTTP/1.1 429 Too Many Requests
 
 Connection:keep-alive

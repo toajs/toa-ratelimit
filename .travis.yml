@@ -1,8 +1,13 @@
 language: node_js
 node_js:
+  - "4.5.0"
   - "4"
   - "6"
   - "7"
-sudo: false
+  - "8"
+cache:
+  directories:
+    - node_modules
 services:
   - redis-server
+sudo: false
