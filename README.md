@@ -105,8 +105,8 @@ app.use(function * () {
 Remove `context`'s rate limit data. Return thunk function.
 
 ```js
-yield limiter.remove(this)(function (err, res) {
-  console.log(err, res) // null, 1
+limiter.remove(this).then(function (res) {
+  console.log(res) //  1
 })
 ```
 

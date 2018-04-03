@@ -27,32 +27,27 @@ module.exports = function ratelimit (opts) {
 
   limiter.connect.apply(limiter, redis)
 
-  function limit (next) {
+  function limit () {
     let args = getArgs(this)
-    if (!args) return next()
-    let ctx = this
-    limiter.get(args)((err, res) => {
-      if (err) throw err
+    if (!args) return Promise.resolve()
+    return limiter.get(args).then((res) => {
       // header fields
-      ctx.set('x-ratelimit-limit', res.total)
-      ctx.set('x-ratelimit-remaining', res.remaining)
-      ctx.set('x-ratelimit-reset', Math.ceil(res.reset / 1000))
+      this.set('x-ratelimit-limit', res.total)
+      this.set('x-ratelimit-remaining', res.remaining)
+      this.set('x-ratelimit-reset', Math.ceil(res.reset / 1000))
       if (res.remaining >= 0) return
 
       let after = Math.ceil((res.reset - Date.now()) / 1000)
-      ctx.status = 429
-      ctx.set('retry-after', after)
-      ctx.body = `Rate limit exceeded, retry in ${after} seconds.`
-      ctx.end()
-    })(next)
+      this.status = 429
+      this.set('retry-after', after)
+      this.body = `Rate limit exceeded, retry in ${after} seconds.`
+      this.end()
+    })
   }
 
   limit.remove = function (ctx) {
-    return (done) => {
-      let args = getArgs(ctx)
-      if (!args) return done()
-      limiter.remove(args[0])(done)
-    }
+    let args = getArgs(ctx)
+    return args ? limiter.remove(args[0]) : Promise.resolve()
   }
 
   function getArgs (ctx) {
