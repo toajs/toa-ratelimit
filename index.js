@@ -4,6 +4,7 @@
 // **License:** MIT
 
 const Limiter = require('thunk-ratelimiter')
+const slice = Array.prototype.slice
 
 module.exports = function ratelimit (opts) {
   if (!opts || typeof opts.getId !== 'function') throw new Error('getId function required')
@@ -27,7 +28,7 @@ module.exports = function ratelimit (opts) {
 
   limiter.connect.apply(limiter, redis)
 
-  function limit () {
+  function middleware () {
     let args = getArgs(this)
     if (!args) return Promise.resolve()
     return limiter.get(args).then((res) => {
@@ -45,7 +46,11 @@ module.exports = function ratelimit (opts) {
     })
   }
 
-  limit.remove = function (ctx) {
+  middleware.get = function (id, max, duration) {
+    return limiter.get(slice.call(arguments))
+  }
+
+  middleware.remove = function (ctx) {
     let args = getArgs(ctx)
     return args ? limiter.remove(args[0]) : Promise.resolve()
   }
@@ -72,5 +77,5 @@ module.exports = function ratelimit (opts) {
     return args
   }
 
-  return limit
+  return middleware
 }

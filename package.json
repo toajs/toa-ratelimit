@@ -4,7 +4,7 @@
   "authors": [
     "Yan Qing <admin@zensh.com>"
   ],
-  "version": "2.3.0",
+  "version": "2.3.1",
   "main": "index.js",
   "license": "MIT",
   "repository": {
@@ -23,7 +23,7 @@
     "redis"
   ],
   "dependencies": {
-    "thunk-ratelimiter": "^3.0.0"
+    "thunk-ratelimiter": "^3.0.1"
   },
   "devDependencies": {
     "standard": "^11.0.1",
